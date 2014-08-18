@@ -68,8 +68,8 @@ compile[Syntax.End] = function() {
     } else {
       state.postMessage({
         type: "end",
-        args: [ currentTime ]
-      });
+        when: currentTime
+      }, { bubble: true });
     }
   };
 };
@@ -91,12 +91,16 @@ compile[Syntax.Note] = function(node) {
           type: "sched",
           when: currentTime + duration + (offset || 0),
           callback: fn
-        });
+        }, { private: true });
       }
 
       state.postMessage({
         type: "note",
-        args: [ currentTime, midi, duration, noteOff, index ]
+        when: currentTime,
+        midi: midi,
+        duration: duration,
+        noteOff: noteOff,
+        chordIndex: index
       });
     });
 
@@ -222,9 +226,9 @@ Emitter.prototype.addListener = Emitter.prototype.on;
 
 Emitter.prototype.once = function(event, listener) {
 
-  function fn() {
+  function fn(arg) {
     this.off(event, fn);
-    listener.apply(this, arguments);
+    listener.call(this, arg);
   }
 
   fn.listener = listener;
@@ -255,11 +259,9 @@ Emitter.prototype.removeListener = Emitter.prototype.off;
 
 Emitter.prototype.removeAllListeners = Emitter.prototype.off;
 
-Emitter.prototype.emit = function(event) {
-  var args = [].slice.call(arguments, 1);
-
+Emitter.prototype.emit = function(event, arg) {
   this.listeners(event).forEach(function(fn) {
-    fn.apply(this, args);
+    fn.call(this, arg);
   }, this);
 };
 
@@ -718,7 +720,7 @@ Sequencer.prototype.onmessage = function(message) {
   if (message && message.type === "end") {
     this._ended += 1;
     if (this.tracks.length <= this._ended) {
-      this.emit("end", message.args[0]);
+      this.emit("end", message);
     }
   }
 };
@@ -817,19 +819,17 @@ Track.prototype._process = function(currentTime) {
   }
 };
 
-Track.prototype.onmessage = function(message) {
-  switch (message.type) {
-  case "sched":
+Track.prototype.onmessage = function(message, opts) {
+  opts = opts || {};
+
+  if (message.type === "sched") {
     this.sched(message.when, message.callback);
-    break;
-  case "end":
-    this.emit.apply(this, [ message.type ].concat(message.args));
-    if (this._parent && message.type === "end") {
-      this._parent.onmessage(message);
-    }
-    break;
-  default:
-    this.emit.apply(this, [ message.type ].concat(message.args));
+  }
+  if (!opts.private) {
+    this.emit(message.type, message);
+  }
+  if (opts.bubble && this._parent) {
+    this._parent.onmessage(message);
   }
 };
 

@@ -502,12 +502,12 @@ function parse(scanner) {
   }
 
   function chord() {
-    scanner.expect("(");
+    scanner.expect("[");
 
     var number = [];
     var offset = 0;
 
-    until(")", function() {
+    until("]", function() {
       switch (scanner.peek()) {
       case "c": case "d": case "e": case "f": case "g": case "a": case "b":
         number.push(noteNum(offset));
@@ -525,7 +525,7 @@ function parse(scanner) {
       }
     });
 
-    scanner.expect(")");
+    scanner.expect("]");
 
     return { type: Syntax.Note, number: number, length: length(null) };
   }
@@ -573,16 +573,18 @@ function parse(scanner) {
   }
 
   function loop() {
-    scanner.expect("[");
+    scanner.expect("/");
+    scanner.expect(":");
 
     var seq = [ { type: Syntax.LoopBegin } ];
 
-    until(/\||\]/, function() {
+    until(/[|:]/, function() {
       append(seq, advance());
     });
     append(seq, loopExit());
 
-    scanner.expect("]");
+    scanner.expect(":");
+    scanner.expect("/");
 
     seq.push({ type: Syntax.LoopEnd });
 
@@ -599,7 +601,7 @@ function parse(scanner) {
 
       seq.push({ type: Syntax.LoopExit });
 
-      until("]", function() {
+      until(":", function() {
         append(seq, advance());
       });
     }
@@ -611,7 +613,7 @@ function parse(scanner) {
     switch (scanner.peek()) {
     case "c": case "d": case "e": case "f": case "g": case "a": case "b":
       return note();
-    case "(":
+    case "[":
       return chord();
     case "r":
       return r();
@@ -629,7 +631,7 @@ function parse(scanner) {
       return t();
     case "$":
       return infLoop();
-    case "[":
+    case "/":
       return loop();
     }
     scanner.throwUnexpectedToken();
@@ -848,7 +850,7 @@ module.exports = Track;
 var Sequencer = _dereq_("./sequencer");
 
 module.exports = {
-  version: "0.1.0",
+  version: "0.1.1",
   Sequencer: Sequencer
 };
 

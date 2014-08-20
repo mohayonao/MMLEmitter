@@ -1,15 +1,14 @@
 "use strict";
 
-var parse   = require("../src/parse");
-var compile = require("../src/compile");
-var Track   = require("../src/track");
+var MMLParser = require("../src/mml-parser");
+var MMLTrack = require("../src/mml-track");
 
-describe("track", function() {
+describe("MMLTrack", function() {
 
-  it("timeline", function() {
+  it("should work", function() {
     var timeline = [];
 
-    var mml = new Track(null, compile(parse("cd l8 efg[ab]")[0]))
+    var track = new MMLTrack(null, MMLParser.parse("cd l(len) efg[ab]")[0])
       .on("note", function(e) {
         var midi = e.midi;
 
@@ -22,19 +21,20 @@ describe("track", function() {
       .on("end", function(e) {
         timeline.push([ e.when, "end" ]);
       });
+    track.len = 8;
 
     var currentTime     = 100.0;
     var currentTimeIncr = 0.2;
 
     timeline.push([ currentTime, "init" ]);
 
-    mml._init(currentTime, currentTimeIncr);
+    track._init(currentTime, currentTimeIncr);
     currentTime += currentTimeIncr;
 
     while (currentTime <= 102.0) {
       timeline.push([ +currentTime.toFixed(6), "----" ]);
 
-      mml._process(currentTime);
+      track._process(currentTime);
 
       currentTime += currentTimeIncr;
     }

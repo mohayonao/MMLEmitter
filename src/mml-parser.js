@@ -1,5 +1,7 @@
 "use strict";
 
+var Scanner = require("./scanner");
+var ExprParser = require("./expr-parser");
 var Syntax = require("./syntax");
 
 function append(list, elem) {
@@ -12,141 +14,6 @@ function append(list, elem) {
 
   return list;
 }
-
-function defaults(val, defaultValue) {
-  return val === null ? defaultValue : val;
-}
-
-function scanner(str) {
-  str = String(str);
-
-  var len = str.length;
-  var pos = 0;
-  var lineNumber = len ? 1 : 0;
-  var lineStart  = 0;
-
-  function hasNext() {
-    return pos < len;
-  }
-
-  function peek() {
-    return str.charAt(pos);
-  }
-
-  function next() {
-    return str.charAt(pos++);
-  }
-
-  function match(matcher) {
-    return matcher.test ?
-      matcher.test(str.charAt(pos)) :
-      str.charAt(pos) === matcher;
-  }
-
-  function expect(matcher) {
-    if (!match(matcher)) {
-      throwUnexpectedToken();
-    }
-    pos += 1;
-  }
-
-  function scan(matcher) {
-    var matched = matcher.exec(str.substr(pos));
-
-    if (matched && matched.index === 0) {
-      matched = matched[0];
-      pos += matched.length;
-    } else {
-      matched = null;
-    }
-
-    return matched;
-  }
-
-  function skipComment() {
-    while (hasNext()) {
-      var ch1 = str.charCodeAt(pos);
-      var ch2 = str.charCodeAt(pos + 1);
-
-      if (ch1 === 0x20 || ch1 === 0x09) { // <SPACE> or <TAB>
-        pos += 1;
-      } else if (ch1 === 0x0a) { // <CR>
-        pos += 1;
-        lineNumber += 1;
-        lineStart = pos;
-      } else if (ch1 === 0x2f && ch2 === 0x2f) {
-        skipSingleLineComment();
-      } else if (ch1 === 0x2f && ch2 === 0x2a) {
-        skipMultiLineComment();
-      } else {
-        break;
-      }
-    }
-  }
-
-  function skipSingleLineComment() {
-    pos += 2; // skip //
-
-    while (hasNext()) {
-      if (str.charCodeAt(pos++) === 0x0a) { // <CR>
-        lineNumber += 1;
-        lineStart = pos;
-        break;
-      }
-    }
-  }
-
-  function skipMultiLineComment() {
-    var depth = 1;
-
-    pos += 2; // skip /*
-
-    while (hasNext()) {
-      var ch1 = str.charCodeAt(pos++);
-      var ch2 = str.charCodeAt(pos);
-
-      if (ch1 === 0x0a) { // <CR>
-        lineNumber += 1;
-        lineStart = pos;
-      } else if (ch1 === 0x2f && ch2 === 0x2a) { // /*
-        pos += 1;
-        ++depth;
-      } else if (ch1 === 0x2a && ch2 === 0x2f) { // */
-        pos += 1;
-        if (--depth === 0) {
-          pos += 1;
-          return;
-        }
-      }
-    }
-
-    throwUnexpectedToken();
-  }
-
-  function throwUnexpectedToken() {
-    var ch = peek();
-    var msg = "Unexpected token" + (ch ? (": '" + ch + "'") : " ILLEGAL");
-    var err = new SyntaxError(msg);
-
-    err.index = pos;
-    err.lineNumber = lineNumber;
-    err.column = pos - lineStart + (ch ? 1 : 0);
-
-    throw err;
-  }
-
-  return {
-    hasNext: hasNext,
-    peek: peek,
-    next: next,
-    match: match,
-    expect: expect,
-    scan: scan,
-    forward: skipComment,
-    throwUnexpectedToken: throwUnexpectedToken
-  };
-}
-
 
 function parse(scanner) {
 
@@ -191,11 +58,15 @@ function parse(scanner) {
     return 0;
   }
 
-  function length(defaultVal) {
-    return append([ defaults(arg(/\d+/), defaultVal) ].concat(dot()), tie());
+  function length() {
+    return append([ arg(/\d+/) ].concat(dot()), tie());
   }
 
   function arg(matcher) {
+    if (scanner.match("(")) {
+      return expr();
+    }
+
     var num = scanner.scan(matcher);
 
     return num !== null ? +num : null;
@@ -213,7 +84,7 @@ function parse(scanner) {
   }
 
   function note() {
-    return { type: Syntax.Note, number: [ noteNum(0) ], length: length(null) };
+    return { type: Syntax.Note, number: [ noteNum(0) ], length: length() };
   }
 
   function chord() {
@@ -242,43 +113,49 @@ function parse(scanner) {
 
     scanner.expect("]");
 
-    return { type: Syntax.Note, number: number, length: length(null) };
+    return { type: Syntax.Note, number: number, length: length() };
   }
 
   function r() {
     scanner.expect("r");
 
-    return { type: Syntax.Note, number: [], length: length(null) };
+    return { type: Syntax.Note, number: [], length: length() };
   }
 
   function o() {
     scanner.expect("o");
 
-    return { type: Syntax.Octave, value: defaults(arg(/\d+/), 5) };
+    return { type: Syntax.Octave, value: arg(/\d+/) };
   }
 
   function oShift(direction) {
     scanner.expect(/<|>/);
 
-    return { type: Syntax.OctaveShift, direction: direction|0, value: defaults(arg(/\d+/), 1) };
+    return { type: Syntax.OctaveShift, direction: direction|0, value: arg(/\d+/) };
   }
 
   function l() {
     scanner.expect("l");
 
-    return { type: Syntax.Length, length: length(4) };
+    return { type: Syntax.Length, length: length() };
   }
 
   function q() {
     scanner.expect("q");
 
-    return { type: Syntax.Quantize, value: defaults(arg(/\d+/), 6) };
+    return { type: Syntax.Quantize, value: arg(/\d+/) };
   }
 
   function t() {
     scanner.expect("t");
 
-    return { type: Syntax.Tempo, value: defaults(arg(/\d+(\.\d+)?/), 120) };
+    return { type: Syntax.Tempo, value: arg(/\d+(\.\d+)?/) };
+  }
+
+  function v() {
+    scanner.expect("v");
+
+    return { type: Syntax.Velocity, value: arg(/\d+/) };
   }
 
   function infLoop() {
@@ -324,6 +201,32 @@ function parse(scanner) {
     return seq;
   }
 
+  function command() {
+    scanner.expect("@");
+
+    return { type: Syntax.Command, value: arg(/\d+/) };
+  }
+
+  function expr() {
+    var node;
+
+    scanner.expect("(");
+
+    node = ExprParser.parse(scanner);
+
+    scanner.expect(")");
+
+    node.variables.forEach(function(id) {
+      if (id.charAt(0) === "_") {
+        throw new SyntaxError(
+          "A variable in directives should not be started with '_': " + id
+        );
+      }
+    });
+
+    return { type: Syntax.Expression, expr: node.expr, variables: node.variables };
+  }
+
   function advance() {
     switch (scanner.peek()) {
     case "c": case "d": case "e": case "f": case "g": case "a": case "b":
@@ -344,10 +247,14 @@ function parse(scanner) {
       return q();
     case "t":
       return t();
+    case "v":
+      return v();
     case "$":
       return infLoop();
     case "/":
       return loop();
+    case "@":
+      return command();
     }
     scanner.throwUnexpectedToken();
   }
@@ -375,6 +282,6 @@ function parse(scanner) {
   return mml();
 }
 
-module.exports = function(mml) {
-  return parse(scanner(mml));
+module.exports.parse = function(mml) {
+  return parse(new Scanner(mml));
 };

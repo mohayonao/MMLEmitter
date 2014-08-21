@@ -2,6 +2,7 @@
 
 var MMLCompiler = require("../src/mml-compiler");
 var MMLParser = require("../src/mml-parser");
+var Config = require("../src/config");
 var Emitter = require("../src/emitter");
 
 function duration(tempo, len, dot, quantize) {
@@ -15,7 +16,7 @@ function duration(tempo, len, dot, quantize) {
 }
 
 describe("MMLCompiler", function() {
-  describe("compile", function() {
+  describe(".compile(ctx, nodes)", function() {
     var testCase = {
       "ceg": [
         [ "note", 0, 72, duration(120, 4, 0, 6), 0 ],
@@ -136,7 +137,8 @@ describe("MMLCompiler", function() {
         var passed = [];
         var obj = new Emitter();
 
-        obj._index = 0;
+        obj._pos = 0;
+        obj._config = Config.build();
         obj._recv = function(e) {
           obj.emit(e.type, e);
         };
@@ -154,9 +156,9 @@ describe("MMLCompiler", function() {
 
         var compiled = MMLCompiler.compile({}, MMLParser.parse(mml)[0]);
 
-        while (obj._index < compiled.length && when < 16) {
-          compiled[obj._index](obj, when);
-          obj._index += 1;
+        while (obj._pos < compiled.length && when < 16) {
+          compiled[obj._pos](obj, when);
+          obj._pos += 1;
         }
 
         expect(passed).to.eql(testCase[mml]);

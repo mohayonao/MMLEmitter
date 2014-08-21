@@ -1,7 +1,45 @@
 !function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.MMLEmitter=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
 module.exports = _dereq_("./src/");
 
-},{"./src/":6}],2:[function(_dereq_,module,exports){
+},{"./src/":7}],2:[function(_dereq_,module,exports){
+"use strict";
+
+function config(obj) {
+  obj = Object.create(obj || {});
+
+  var defaults = {
+    defaultTempo: 120,
+    minTempo: 30,
+    maxTempo: 240,
+    defaultOctave: 5,
+    minOctave: 0,
+    maxOctave: 9,
+    defaultLength: 4,
+    minLength: 1,
+    maxLength: 64,
+    defaultQuantize: 6,
+    minQuantize: 0,
+    maxQuantize: 8,
+    defaultVolume: 12,
+    minVolume: 0,
+    maxVolume: 16,
+    octaveShiftDirection: 1,
+    A4Frequency: 440.0,
+    A4Index: 69,
+  };
+
+  Object.keys(defaults).forEach(function(key) {
+    if (typeof obj[key] !== "number") {
+      obj[key] = defaults[key];
+    }
+  });
+
+  return obj;
+}
+
+module.exports.build = config;
+
+},{}],3:[function(_dereq_,module,exports){
 "use strict";
 
 function Emitter() {
@@ -72,7 +110,7 @@ Emitter.prototype.emit = function(event, arg) {
 
 module.exports = Emitter;
 
-},{}],3:[function(_dereq_,module,exports){
+},{}],4:[function(_dereq_,module,exports){
 "use strict";
 
 function startsWithDollar(id) {
@@ -123,7 +161,7 @@ function compile(ctx, expr) {
 
 module.exports.compile = compile;
 
-},{}],4:[function(_dereq_,module,exports){
+},{}],5:[function(_dereq_,module,exports){
 "use strict";
 
 var KEYWORDS =[
@@ -248,7 +286,7 @@ function parse(scanner) {
 
 module.exports.parse = parse;
 
-},{}],5:[function(_dereq_,module,exports){
+},{}],6:[function(_dereq_,module,exports){
 "use strict";
 
 /**
@@ -263,16 +301,16 @@ module.exports = function(ctor, superCtor) {
   });
 };
 
-},{}],6:[function(_dereq_,module,exports){
+},{}],7:[function(_dereq_,module,exports){
 "use strict";
 
 var MMLEmitter = _dereq_("./mml-emitter");
 
-MMLEmitter.version = "0.2.0";
+MMLEmitter.version = "0.2.2";
 
 module.exports = MMLEmitter;
 
-},{"./mml-emitter":8}],7:[function(_dereq_,module,exports){
+},{"./mml-emitter":9}],8:[function(_dereq_,module,exports){
 "use strict";
 
 var ExprCompiler = _dereq_("./expr-compiler");
@@ -298,6 +336,7 @@ function valueOf(ctx, value, defaultVal) {
 }
 
 function calcTotalDuration(ctx, length) {
+  var config = ctx._config;
   var prev = null;
   var dotted = 0;
 
@@ -313,7 +352,12 @@ function calcTotalDuration(ctx, length) {
     } else {
       prev = dotted = elem;
     }
-    return (60 / ctx._tempo) * (4 / clip(valueOf(ctx, elem, 4), 1, 1920));
+
+    var length = valueOf(ctx, elem, 4);
+
+    length = clip(length, config.minLength, config.maxLength);
+
+    return (60 / ctx._tempo) * (4 / length);
   }).reduce(sum, 0);
 }
 
@@ -347,15 +391,16 @@ function compile(track, nodes) {
 
 compile[Syntax.Begin] = function() {
   return function(ctx, currentTime) {
-    ctx._tempo    = 120;
-    ctx._octave   = 5;
-    ctx._quantize = 6;
-    ctx._velocity = 12;
-    ctx._length   = 4;
+    ctx._tempo    = ctx._config.defaultTempo;
+    ctx._octave   = ctx._config.defaultOctave;
+    ctx._quantize = ctx._config.defaultQuantize;
+    ctx._volume   = ctx._config.defaultVolume;
+    ctx._length   = ctx._config.defaultLength;
     ctx._lenList  = [ ctx._length ];
     ctx._loopStack = [];
-    ctx._infLoopIndex = null;
-    ctx._infLoopWhen  = currentTime;
+    ctx._infLoopPos  = null;
+    ctx._infLoopWhen = currentTime;
+    ctx._noteIndex = 0;
 
     return currentTime;
   };
@@ -363,9 +408,9 @@ compile[Syntax.Begin] = function() {
 
 compile[Syntax.End] = function() {
   return function(ctx, currentTime) {
-    if (ctx._infLoopIndex !== null) {
+    if (ctx._infLoopPos !== null) {
       if (ctx._infLoopWhen !== currentTime) {
-        ctx._index = ctx._infLoopIndex;
+        ctx._pos = ctx._infLoopPos;
       }
     } else {
       ctx._recv({
@@ -380,13 +425,22 @@ compile[Syntax.End] = function() {
 
 compile[Syntax.Note] = function(node) {
   return function(ctx, currentTime) {
+    var config = ctx._config;
     var totalDuration = calcTotalDuration(ctx, node.length);
-    var duration = totalDuration * (ctx._quantize / 8);
+    var duration = totalDuration * (ctx._quantize / config.maxQuantize);
 
-    var velocity = ctx._velocity;
+    var noteIndex = ctx._noteIndex++;
+    var isChord = node.note.length > 1;
 
-    node.number.forEach(function(number, index) {
-      var midi = ctx._octave * 12 + number + 12;
+    node.note.forEach(function(note, index) {
+      var midi, frequency;
+
+      midi = note.noteNum + note.acci;
+      midi += ctx._octave * 12;
+      midi += config.A4Index - 57;
+
+      frequency = config.A4Frequency;
+      frequency *= Math.pow(2, (midi - config.A4Index) * 1 / 12);
 
       function noteOff(fn, offset) {
         ctx._recv({
@@ -398,12 +452,22 @@ compile[Syntax.Note] = function(node) {
 
       ctx._recv({
         type: "note",
+        index: noteIndex,
         when: currentTime,
+        nextWhen: currentTime + totalDuration,
         midi: midi,
+        frequency: frequency,
+        noteNum: note.noteNum,
+        accidental: note.acci,
         duration: duration,
-        noteOff: noteOff,
+        isChord: isChord,
         chordIndex: index,
-        velocity: velocity
+        tempo: ctx._tempo,
+        volume: ctx._volume,
+        octave: ctx._octave,
+        length: ctx._length,
+        quantize: ctx._quantize,
+        noteOff: noteOff,
       });
     });
 
@@ -413,7 +477,10 @@ compile[Syntax.Note] = function(node) {
 
 compile[Syntax.Octave] = function(node) {
   return function(ctx, currentTime) {
-    ctx._octave = clip(valueOf(ctx, node.value, 5), 0, 8);
+    var config = ctx._config;
+    var octave = valueOf(ctx, node.value, config.defaultOctave);
+
+    ctx._octave = clip(octave, config.minOctave, config.maxOctave);
 
     return currentTime;
   };
@@ -421,16 +488,25 @@ compile[Syntax.Octave] = function(node) {
 
 compile[Syntax.OctaveShift] = function(node) {
   return function(ctx, currentTime) {
-    var octave = ctx._octave + node.direction * valueOf(ctx, node.value, 1);
-    ctx._octave = clip(octave, 0, 8);
+    var config = ctx._config;
+    var octave = ctx._octave;
+
+    octave += node.direction * config.octaveShiftDirection * valueOf(ctx, node.value, 1);
+    ctx._octave = clip(octave, config.minOctave, config.maxOctave);
+
     return currentTime;
   };
 };
 
 compile[Syntax.Length] = function(node) {
   return function(ctx, currentTime) {
-    ctx._length  = node.length[0];
-    ctx._lenList = node.length;
+    var config = ctx._config;
+
+    ctx._lenList = node.length.map(function(node) {
+      var length = valueOf(ctx, node, config.defaultLength);
+      return clip(length, config.minLength, config.maxLength);
+    }, this);
+    ctx._length  = ctx._lenList[0];
 
     return currentTime;
   };
@@ -438,7 +514,10 @@ compile[Syntax.Length] = function(node) {
 
 compile[Syntax.Quantize] = function(node) {
   return function(ctx, currentTime) {
-    ctx._quantize = clip(valueOf(ctx, node.value, 6), 0, 8);
+    var config = ctx._config;
+    var quantize = valueOf(ctx, node.value, config.defaultQuantize);
+
+    ctx._quantize = clip(quantize, config.minQuantize, config.maxQuantize);
 
     return currentTime;
   };
@@ -446,15 +525,21 @@ compile[Syntax.Quantize] = function(node) {
 
 compile[Syntax.Tempo] = function(node) {
   return function(ctx, currentTime) {
-    ctx._tempo = clip(valueOf(ctx, node.value, 120), 1, 511);
+    var config = ctx._config;
+    var tempo = valueOf(ctx, node.value, config.defaultTempo);
+
+    ctx._tempo = clip(tempo, config.minTempo, config.maxTempo);
 
     return currentTime;
   };
 };
 
-compile[Syntax.Velocity] = function(node) {
+compile[Syntax.Volume] = function(node) {
   return function(ctx, currentTime) {
-    ctx._velocity = clip(valueOf(ctx, node.value, 12), 0, 16);
+    var config = ctx._config;
+    var volume = valueOf(ctx, node.value, config.defaultVolume);
+
+    ctx._volume = clip(volume, config.minVolume, config.maxVolume);
 
     return currentTime;
   };
@@ -462,8 +547,8 @@ compile[Syntax.Velocity] = function(node) {
 
 compile[Syntax.InfLoop] = function(node, index) {
   return function(ctx, currentTime) {
-    ctx._infLoopIndex = index;
-    ctx._infLoopWhen  = currentTime;
+    ctx._infLoopPos  = index;
+    ctx._infLoopWhen = currentTime;
 
     return currentTime;
   };
@@ -484,7 +569,7 @@ compile[Syntax.LoopExit] = function() {
     var looper = peek(ctx._loopStack);
 
     if (looper[0] <= 1 && looper[2] !== null) {
-      ctx._index = looper[2];
+      ctx._pos = looper[2];
     }
 
     return currentTime;
@@ -502,7 +587,7 @@ compile[Syntax.LoopEnd] = function(node, index) {
     looper[0] -= 1;
 
     if (looper[0] > 0) {
-      ctx._index = looper[1];
+      ctx._pos = looper[1];
     } else {
       ctx._loopStack.pop();
     }
@@ -520,7 +605,7 @@ compile[Syntax.Command] = function(node) {
 
 module.exports.compile = compile;
 
-},{"./expr-compiler":3,"./syntax":12}],8:[function(_dereq_,module,exports){
+},{"./expr-compiler":4,"./syntax":13}],9:[function(_dereq_,module,exports){
 "use strict";
 
 var BUFFER_SIZE = 512;
@@ -528,14 +613,17 @@ var BUFFER_SIZE = 512;
 var extend = _dereq_("./extend");
 var MMLParser = _dereq_("./mml-parser");
 var MMLTrack = _dereq_("./mml-track");
+var Config = _dereq_("./config");
 var Emitter = _dereq_("./emitter");
 
-function MMLEmitter(audioContext, mml) {
+function MMLEmitter(audioContext, mml, config) {
   Emitter.call(this);
+
+  config = Config.build(config);
 
   this.audioContext = audioContext;
   this.tracks = MMLParser.parse(mml).map(function(nodes) {
-    return new MMLTrack(this, nodes);
+    return new MMLTrack(this, nodes, config);
   }, this);
   this._ended = 0;
   this._node = null;
@@ -592,7 +680,7 @@ MMLEmitter.prototype._process = function() {
 
 module.exports = MMLEmitter;
 
-},{"./emitter":2,"./extend":5,"./mml-parser":9,"./mml-track":10}],9:[function(_dereq_,module,exports){
+},{"./config":2,"./emitter":3,"./extend":6,"./mml-parser":10,"./mml-track":11}],10:[function(_dereq_,module,exports){
 "use strict";
 
 var Scanner = _dereq_("./scanner");
@@ -622,10 +710,26 @@ function parse(scanner) {
     }
   }
 
+  function noteInfo(offset) {
+    return { noteNum: noteNum(offset), acci: acci() };
+  }
+
   function noteNum(offset) {
     return {
       c:0, d:2, e:4, f:5, g:7, a:9, b:11
-    }[scanner.next()] + acci() + offset;
+    }[scanner.next()] + offset;
+  }
+
+  function acci() {
+    if (scanner.match("+")) {
+      return +1 * scanner.scan(/\++/).length;
+    }
+
+    if (scanner.match("-")) {
+      return -1 * scanner.scan(/\-+/).length;
+    }
+
+    return 0;
   }
 
   function dot() {
@@ -637,20 +741,6 @@ function parse(scanner) {
     }
 
     return result;
-  }
-
-  function acci() {
-    if (scanner.match("+")) {
-      scanner.next();
-      return +1;
-    }
-
-    if (scanner.match("-")) {
-      scanner.next();
-      return -1;
-    }
-
-    return 0;
   }
 
   function length() {
@@ -679,19 +769,19 @@ function parse(scanner) {
   }
 
   function note() {
-    return { type: Syntax.Note, number: [ noteNum(0) ], length: length() };
+    return { type: Syntax.Note, note: [ noteInfo(0) ], length: length() };
   }
 
   function chord() {
     scanner.expect("[");
 
-    var number = [];
+    var noteList = [];
     var offset = 0;
 
     until("]", function() {
       switch (scanner.peek()) {
       case "c": case "d": case "e": case "f": case "g": case "a": case "b":
-        number.push(noteNum(offset));
+        noteList.push(noteInfo(offset));
         break;
       case "<":
         scanner.next();
@@ -708,13 +798,13 @@ function parse(scanner) {
 
     scanner.expect("]");
 
-    return { type: Syntax.Note, number: number, length: length() };
+    return { type: Syntax.Note, note: noteList, length: length() };
   }
 
   function r() {
     scanner.expect("r");
 
-    return { type: Syntax.Note, number: [], length: length() };
+    return { type: Syntax.Note, note: [], length: length() };
   }
 
   function o() {
@@ -750,7 +840,7 @@ function parse(scanner) {
   function v() {
     scanner.expect("v");
 
-    return { type: Syntax.Velocity, value: arg(/\d+/) };
+    return { type: Syntax.Volume, value: arg(/\d+/) };
   }
 
   function infLoop() {
@@ -881,7 +971,7 @@ module.exports.parse = function(mml) {
   return parse(new Scanner(mml));
 };
 
-},{"./expr-parser":4,"./scanner":11,"./syntax":12}],10:[function(_dereq_,module,exports){
+},{"./expr-parser":5,"./scanner":12,"./syntax":13}],11:[function(_dereq_,module,exports){
 "use strict";
 
 var WHEN = 0;
@@ -895,12 +985,13 @@ function schedSorter(a, b) {
   return a[WHEN] - b[WHEN];
 }
 
-function MMLTrack(parent, nodes) {
+function MMLTrack(parent, nodes, config) {
   Emitter.call(this);
 
-  this._index = 0;
+  this._pos = 0;
   this._parent = parent;
   this._shared = parent;
+  this._config = config;
   this._nodes = MMLCompiler.compile(this, nodes);
   this._sched = [];
   this._currentTimeIncr = 0;
@@ -911,15 +1002,15 @@ MMLTrack.prototype._init = function(currentTime, currentTimeIncr) {
   this._currentTimeIncr = currentTimeIncr;
 
   var next = function(currentTime) {
-    var nextCurrentTime = currentTime + this._currentTimeIncr;
+    var nextCurrentTime = currentTime + this._currentTimeIncr + 0.015;
     var nodes = this._nodes;
 
-    while (this._index < nodes.length && currentTime < nextCurrentTime) {
-      currentTime = nodes[this._index](this, currentTime);
-      this._index += 1;
+    while (this._pos < nodes.length && currentTime < nextCurrentTime) {
+      currentTime = nodes[this._pos](this, currentTime);
+      this._pos += 1;
     }
 
-    if (this._index < nodes.length) {
+    if (this._pos < nodes.length) {
       this.sched(currentTime, next);
     }
 
@@ -929,7 +1020,7 @@ MMLTrack.prototype._init = function(currentTime, currentTimeIncr) {
 };
 
 MMLTrack.prototype._process = function(currentTime) {
-  var nextCurrentTime = currentTime + this._currentTimeIncr;
+  var nextCurrentTime = currentTime + this._currentTimeIncr + 0.015;
 
   var sched = this._sched;
 
@@ -963,7 +1054,7 @@ MMLTrack.prototype.sched = function(when, fn) {
 
 module.exports = MMLTrack;
 
-},{"./emitter":2,"./extend":5,"./mml-compiler":7}],11:[function(_dereq_,module,exports){
+},{"./emitter":3,"./extend":6,"./mml-compiler":8}],12:[function(_dereq_,module,exports){
 "use strict";
 
 function Scanner(str) {
@@ -1098,7 +1189,7 @@ function Scanner(str) {
 
 module.exports = Scanner;
 
-},{}],12:[function(_dereq_,module,exports){
+},{}],13:[function(_dereq_,module,exports){
 "use strict";
 
 module.exports = {
@@ -1110,7 +1201,7 @@ module.exports = {
   Length: 4,
   Quantize: 5,
   Tempo: 6,
-  Velocity: 7,
+  Volume: 7,
   InfLoop: 8,
   LoopBegin: 9,
   LoopExit: 10,

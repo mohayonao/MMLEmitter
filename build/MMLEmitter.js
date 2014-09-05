@@ -306,7 +306,7 @@ module.exports = function(ctor, superCtor) {
 
 var MMLEmitter = _dereq_("./mml-emitter");
 
-MMLEmitter.version = "0.2.3";
+MMLEmitter.version = "0.2.4";
 
 module.exports = MMLEmitter;
 
@@ -415,7 +415,11 @@ compile[Syntax.End] = function() {
     } else {
       ctx._recv({
         type: "end",
-        when: currentTime
+        playbackTime: currentTime,
+
+        /* deprecated*/
+        when: currentTime,
+
       }, { bubble: true });
     }
 
@@ -449,7 +453,9 @@ compile[Syntax.Note] = function(node) {
       function noteOff(fn, offset) {
         ctx._recv({
           type: "sched",
-          when: currentTime + duration + (offset || 0),
+
+          playbackTime: currentTime + duration + (offset || 0),
+
           callback: fn
         }, { private: true });
       }
@@ -457,8 +463,13 @@ compile[Syntax.Note] = function(node) {
       ctx._recv({
         type: "note",
         index: noteIndex,
+        playbackTime: currentTime,
+        nextPlaybackTime: currentTime + totalDuration,
+
+        /* deprecated */
         when: currentTime,
         nextWhen: currentTime + totalDuration,
+
         midi: midi,
         frequency: frequency,
         noteNum: note.noteNum,
@@ -674,8 +685,8 @@ MMLEmitter.prototype._recv = function(message) {
   }
 };
 
-MMLEmitter.prototype._process = function() {
-  var currentTime = this.audioContext.currentTime;
+MMLEmitter.prototype._process = function(e) {
+  var currentTime = e.playbackTime;
 
   this.tracks.forEach(function(track) {
     track._process(currentTime);
@@ -1039,7 +1050,7 @@ MMLTrack.prototype._recv = function(message, opts) {
   opts = opts || {};
 
   if (message.type === "sched") {
-    this.sched(message.when, message.callback);
+    this.sched(message.playbackTime, message.callback);
   }
   if (!opts.private) {
     this.emit(message.type, message);
@@ -1049,8 +1060,8 @@ MMLTrack.prototype._recv = function(message, opts) {
   }
 };
 
-MMLTrack.prototype.sched = function(when, fn) {
-  this._sched.push([ when, fn ]);
+MMLTrack.prototype.sched = function(playbackTime, fn) {
+  this._sched.push([ playbackTime, fn ]);
   this._sched.sort(schedSorter);
 
   return this;

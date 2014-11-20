@@ -302,14 +302,21 @@ module.exports = function(ctor, superCtor) {
 };
 
 },{}],7:[function(require,module,exports){
+(function (global){
 "use strict";
 
 var MMLEmitter = require("./mml-emitter");
 
-MMLEmitter.version = "0.2.6";
+MMLEmitter.version = "0.2.7";
+
+/* istanbul ignore next */
+if (typeof global.window !== "undefined") {
+  global.window.MMLEmitter = MMLEmitter;
+}
 
 module.exports = MMLEmitter;
 
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"./mml-emitter":9}],8:[function(require,module,exports){
 "use strict";
 

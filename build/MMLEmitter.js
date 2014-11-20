@@ -1,7 +1,7 @@
-!function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.MMLEmitter=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
-module.exports = _dereq_("./src/");
+(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+module.exports = require("./src/");
 
-},{"./src/":7}],2:[function(_dereq_,module,exports){
+},{"./src/":7}],2:[function(require,module,exports){
 "use strict";
 
 function config(obj) {
@@ -39,7 +39,7 @@ function config(obj) {
 
 module.exports.build = config;
 
-},{}],3:[function(_dereq_,module,exports){
+},{}],3:[function(require,module,exports){
 "use strict";
 
 function Emitter() {
@@ -110,7 +110,7 @@ Emitter.prototype.emit = function(event, arg) {
 
 module.exports = Emitter;
 
-},{}],4:[function(_dereq_,module,exports){
+},{}],4:[function(require,module,exports){
 "use strict";
 
 function startsWithDollar(id) {
@@ -161,7 +161,7 @@ function compile(ctx, expr) {
 
 module.exports.compile = compile;
 
-},{}],5:[function(_dereq_,module,exports){
+},{}],5:[function(require,module,exports){
 "use strict";
 
 var KEYWORDS =[
@@ -286,7 +286,7 @@ function parse(scanner) {
 
 module.exports.parse = parse;
 
-},{}],6:[function(_dereq_,module,exports){
+},{}],6:[function(require,module,exports){
 "use strict";
 
 /**
@@ -301,20 +301,20 @@ module.exports = function(ctor, superCtor) {
   });
 };
 
-},{}],7:[function(_dereq_,module,exports){
+},{}],7:[function(require,module,exports){
 "use strict";
 
-var MMLEmitter = _dereq_("./mml-emitter");
+var MMLEmitter = require("./mml-emitter");
 
-MMLEmitter.version = "0.2.5";
+MMLEmitter.version = "0.2.6";
 
 module.exports = MMLEmitter;
 
-},{"./mml-emitter":9}],8:[function(_dereq_,module,exports){
+},{"./mml-emitter":9}],8:[function(require,module,exports){
 "use strict";
 
-var ExprCompiler = _dereq_("./expr-compiler");
-var Syntax = _dereq_("./syntax");
+var ExprCompiler = require("./expr-compiler");
+var Syntax = require("./syntax");
 
 function peek(list) {
   return list[list.length - 1];
@@ -620,16 +620,16 @@ compile[Syntax.Command] = function(node) {
 
 module.exports.compile = compile;
 
-},{"./expr-compiler":4,"./syntax":13}],9:[function(_dereq_,module,exports){
+},{"./expr-compiler":4,"./syntax":13}],9:[function(require,module,exports){
 "use strict";
 
 var BUFFER_SIZE = 512;
 
-var extend = _dereq_("./extend");
-var MMLParser = _dereq_("./mml-parser");
-var MMLTrack = _dereq_("./mml-track");
-var Config = _dereq_("./config");
-var Emitter = _dereq_("./emitter");
+var extend = require("./extend");
+var MMLParser = require("./mml-parser");
+var MMLTrack = require("./mml-track");
+var Config = require("./config");
+var Emitter = require("./emitter");
 
 function MMLEmitter(audioContext, mml, config) {
   Emitter.call(this);
@@ -695,12 +695,12 @@ MMLEmitter.prototype._process = function(e) {
 
 module.exports = MMLEmitter;
 
-},{"./config":2,"./emitter":3,"./extend":6,"./mml-parser":10,"./mml-track":11}],10:[function(_dereq_,module,exports){
+},{"./config":2,"./emitter":3,"./extend":6,"./mml-parser":10,"./mml-track":11}],10:[function(require,module,exports){
 "use strict";
 
-var Scanner = _dereq_("./scanner");
-var ExprParser = _dereq_("./expr-parser");
-var Syntax = _dereq_("./syntax");
+var Scanner = require("./scanner");
+var ExprParser = require("./expr-parser");
+var Syntax = require("./syntax");
 
 function append(list, elem) {
 
@@ -986,15 +986,15 @@ module.exports.parse = function(mml) {
   return parse(new Scanner(mml));
 };
 
-},{"./expr-parser":5,"./scanner":12,"./syntax":13}],11:[function(_dereq_,module,exports){
+},{"./expr-parser":5,"./scanner":12,"./syntax":13}],11:[function(require,module,exports){
 "use strict";
 
 var WHEN = 0;
 var FUNC = 1;
 
-var extend  = _dereq_("./extend");
-var Emitter = _dereq_("./emitter");
-var MMLCompiler = _dereq_("./mml-compiler");
+var extend  = require("./extend");
+var Emitter = require("./emitter");
+var MMLCompiler = require("./mml-compiler");
 
 function schedSorter(a, b) {
   return a[WHEN] - b[WHEN];
@@ -1069,7 +1069,7 @@ MMLTrack.prototype.sched = function(playbackTime, fn) {
 
 module.exports = MMLTrack;
 
-},{"./emitter":3,"./extend":6,"./mml-compiler":8}],12:[function(_dereq_,module,exports){
+},{"./emitter":3,"./extend":6,"./mml-compiler":8}],12:[function(require,module,exports){
 "use strict";
 
 function Scanner(str) {
@@ -1204,7 +1204,7 @@ function Scanner(str) {
 
 module.exports = Scanner;
 
-},{}],13:[function(_dereq_,module,exports){
+},{}],13:[function(require,module,exports){
 "use strict";
 
 module.exports = {
@@ -1225,6 +1225,4 @@ module.exports = {
   End: 99,
 };
 
-},{}]},{},[1])
-(1)
-});
+},{}]},{},[1]);
